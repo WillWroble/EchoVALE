@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Using a pretrained JEPA backbone, EchoVALE reframes clinical echocardiographic interpretation from multiple independent binary prediction tasks to the single continuous task of projecting clinical language onto echo video representation space. Without any label supervision, EchoVALE outperforms supervised diagnostic classifiers on their own benchmark, achieving 0.85 N-weighted AUROC across thousands of Fyler codes on held-out 2020+ studies. We show how this approach improves general clinical understanding compared to binary classifiers, and has downstream applications in zero-shot classification, natural language line validation, and full report generation.
+Using a pretrained JEPA backbone, EchoVALE reframes clinical classification from multiple independent binary prediction tasks, to the single continuous task of projecting clnical language onto Echo video representation space. We show how this approach vastly improves general clinical understanding compared to binary classifiers, and has downstream applications in zero-shot classification, natural language line validation, and full report generation.
 
 ## Introduction
 
