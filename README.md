@@ -10,7 +10,7 @@ Current approaches to automated echocardiographic interpretation treat each clin
 
 EchoVALE replaces this paradigm with a single continuous task: given an echocardiographic study and any clinical text, score how well the text describes what is in the echo. For report generation, the system scores a retrieval pool of ~180K known clinical lines against a study simultaneously, producing a probability field over clinical language space.
 
-The line encoder learns from three converging signals:
+Instead of pre-aggregating indepent clinical findings into one embedding like previous contrastive approaches. Each seperate line is left to attend to its own relevant clips. This line encoder learns from three converging signals:
 
 1. **Language prior**: Frozen ClinicalBERT provides a pretrained clinical language geometry. Lines describing related findings are already neighbors in BERT space before any training.
 2. **Co-occurrence structure**: The skip-gram like objective reshapes this space by report context. Lines that co-occur in the same reports are pulled together; lines that never co-occur are pushed apart. This captures clinical relationships that language alone cannot (e.g. "status post Fontan" and "single ventricle physiology" co-occur despite being linguistically dissimilar).
