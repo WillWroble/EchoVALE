@@ -41,6 +41,13 @@ EchoJEPA ViT-B pretrained on BCH pediatric echo data, initialized from V-JEPA 2.
 
 Following VL-JEPA (Chen et al., Meta FAIR, 2025), EchoVALE operates entirely in embedding space rather than autoregressively generating tokens, further constraining the answer space to binary relevance and concentrating representational power on the query side.
 
+**Full pipeline**
+1. The echo study and its ~200 JEPA embedded clips get loaded in.
+2. Any clinical text is entered as a query (is this text relevant to the Echo data)
+3. The text goes through a BERT encoder and the CLS token is used a line level representation
+4. the BERT CLS token is used to Cross Attend over the ~200 768d echo clip embeddings from the study resulting in a 768d study-level representation. (represents the clips/views of the study most relevant to the entered text.
+5. this 768d study-level representation and the 768d line representation are compared to each other with dot product and then normalized via sigmoid function resulting in a final relevancy score for the entered line. 
+
 **Current best**: v11 (JEPA base, W_V, post-CA MLP, 4x post-BERT expansion, 2 BERT layers unfrozen). Ablations ongoing (v12-v16).
 
 ### Generation (`generate_lines.py`)
