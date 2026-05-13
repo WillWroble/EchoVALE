@@ -20,6 +20,12 @@ A novel clinical description inherits geometric proximity to related findings fr
 
 ## Methods
 
+## DATA:
+100K echo reports (Findings, Summary, History)
+100K matching studies (50 videos per study)
+64/16/20 Train/Val/Test
+
+
 ### Vision Backbone: EchoJEPA (`video_pretraining_v2/`)
 
 EchoJEPA ViT-B pretrained on BCH pediatric echo data, initialized from V-JEPA 2.1 weights.
@@ -29,15 +35,34 @@ EchoJEPA ViT-B pretrained on BCH pediatric echo data, initialized from V-JEPA 2.
 - 4 clips (16 frames, 224x224) sampled per video; all clips from a study (~200 total) fed directly into the line encoder
 - JEPA outperforms PanEcho for the line encoder across all Fyler frequency ranges. JEPA tokens encode relational/predictive structure (trained for mutual spatiotemporal prediction), not just category-relevant features.
 
-### Line Encoder: CrossAttentionPool (`line_tokenizer_v2/`)
+### Line Encoder: (`line_tokenizer_v2/`)
 
-**LineEncoder**: Bio_ClinicalBERT (~110M params, 768d CLS, last layer unfrozen) + learned linear projection. Encodes any clinical text string into a line embedding. 
+## HIGH LEVEL
 
-**CrossAttentionPool**: Line embeddings cross-attend over the full set of ~200 frozen video clip embeddings with learned W_Q, W_K, W_V (~18,306,048 trainable params including last BERT layer). Each line asks its own question of the video. A line about tricuspid regurgitation attends to different clip tokens than a line about LV dilation. The output is a line-relative study representation: the video content most relevant to that specific clinical query.
+**Objective**: Given any line of clinical text and a set of embedded echo clips from a study, give a probability score of that line occuring in the echo report.  [maybe cite VQA models] 
 
-**Scoring**: Dot product between the cross-attention output (line-relative study representation) and the raw line embedding, passed through sigmoid, yielding a per-line relevance score.
 
-**Training objective**: Skip-gram BCE. Over 3 fields: findings, summary, and history. Each field-study pair is treated as a separate training sample. For each pair we sample 2 positive lines (lines occurring in the matching field) and 10 negative lines (randomly sampled from the entire pool). Both samplings are down-weighted by frequency. Each lines score is then compared with the binary occurence labels and loss is computed through BCE. 
+
+**1. LineEncoder**: Encodes any clinical text string into a line embedding using a language model.
+
+**2. CrossAttentionPool**: Each line asks its own question of the video, a line about PVS would fetch relevant clip data from the Doppler and ACL1 veiws.
+
+**3. scoring**: the line embedding is then compared against the retreived clip data to compute the final relevancy score.
+
+**4. training**: 
+
+**
+
+
+## LOW LEVEL
+
+**1. LineEncoder**: Bio_ClinicalBERT (~110M params, 768d CLS, last layer unfrozen) + learned linear projection. Encodes any clinical text string into a line embedding. 
+
+**2. CrossAttentionPool**: Line embeddings cross-attend over the full set of ~200 frozen video clip embeddings with learned W_Q, W_K, W_V (~18,306,048 trainable params including last BERT layer). Each line asks its own question of the video. The output is a line-relative study representation: the video content most relevant to that specific clinical query.
+
+**3. Scoring**: To compute the final probabilty score, the dot product between the cross-attention output and the line embedding goes through a sigmoid function (as is done for many-to-many contrastive setups [cite word2vec or similiar)  
+
+**4. Training objective**: Skip-gram BCE. Over 3 fields: findings, summary, and history. Each field-study pair is treated as a separate training sample. For each pair we sample 2 positive lines (lines occurring in the matching field) and 10 negative lines (randomly sampled from the entire pool). Both samplings are down-weighted by frequency. Each lines score is then compared with the binary occurence labels and loss is computed through BCE. 
 
 Following VL-JEPA (Chen et al., Meta FAIR, 2025), EchoVALE operates entirely in embedding space rather than autoregressively generating tokens, further constraining the answer space to binary relevance and concentrating representational power on the query side.
 
@@ -47,6 +72,7 @@ Following VL-JEPA (Chen et al., Meta FAIR, 2025), EchoVALE operates entirely in 
 3. The text goes through a BERT encoder and the CLS token is used a line level representation
 4. the BERT CLS token is used to Cross Attend over the ~200 768d echo clip embeddings from the study resulting in a 768d study-level representation. (represents the clips/views of the study most relevant to the entered text.
 5. this 768d study-level representation and the 768d line representation are compared to each other with dot product and then normalized via sigmoid function resulting in a final relevancy score for the entered line. 
+
 
 **Current best**: v11 (JEPA base, W_V, post-CA MLP, 4x post-BERT expansion, 2 BERT layers unfrozen). Ablations ongoing (v12-v16).
 
