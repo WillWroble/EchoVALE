@@ -15,8 +15,8 @@ class LineEncoder(nn.Module):
             param.requires_grad = False
         for param in self.bert.encoder.layer[-1].parameters():
             param.requires_grad = True
-        #for param in self.bert.encoder.layer[-2].parameters():
-            #param.requires_grad = True
+        for param in self.bert.encoder.layer[-2].parameters():
+            param.requires_grad = True
 
         self.proj = nn.Sequential(
             nn.LayerNorm(768),
@@ -56,6 +56,7 @@ class CrossAttentionPool(nn.Module):
         video_mask: (B, V) — 1 for real, 0 for pad
         returns:    (B, L, D) attended pool per line, in raw video space
         """
+        videos = self.proj(videos)
         Q = self.W_Q(lines)
         K = self.W_K(videos)
         #V = videos
@@ -65,5 +66,5 @@ class CrossAttentionPool(nn.Module):
         scores = scores.masked_fill(mask, -1e9)
         weights = scores.softmax(dim=-1)
         out = torch.einsum("blv,bvd->bld", weights, V)
-        #return out
-        return self.proj(out)
+        return out
+        #return self.proj(out)

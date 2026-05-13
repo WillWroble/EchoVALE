@@ -14,9 +14,9 @@ conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/text_pretraining
 
 python -u eval_fyler.py \
-    --embeddings results/full_contrast_v6/eval/embeddings_video.npz \
+    --embeddings results/full_contrast_jepa_v1/eval/embeddings_video.npz \
     --fyler_labels /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_labels_v2.csv \
     --fyler_lines /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_lines.csv \
-    --output_dir results/full_contrast_v6/eval_fyler_v2 \
+    --output_dir results/full_contrast_jepa_v1/eval_fyler_v2 \
     --train_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/train_50_nofetal.txt \
     --val_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/val_50_modern_nofetal.txt

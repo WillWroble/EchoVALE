@@ -17,11 +17,11 @@ cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2
 
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining/infonce_768_all.npz \
-
+#--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_outside_fixed.npz \
 python -u eval_fyler.py \
-    --checkpoint results/v12/best.pt \
+    --checkpoint results/v17/latest.pt \
     --fyler_lines /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_lines.csv \
     --fyler_labels /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_labels_v2.csv \
     --video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
     --manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/val_50_modern_nofetal.txt \
-    --output_dir results/v12/eval_fyler_lines
+    --output_dir results/v17/eval_fyler_lines
