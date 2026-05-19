@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from transformers import AutoTokenizer
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 
 from model import LineEncoder, CrossAttentionPool
 
@@ -188,7 +188,8 @@ def main():
         if n_pos == 0 or n_pos == len(y):
             continue
         auc = roc_auc_score(y, line_scores[:, j])
-        results[j] = {"auroc": round(auc, 4), "n_pos": n_pos,
+        ap = average_precision_score(y, line_scores[:, j])
+        results[j] = {"auroc": round(auc, 4), "auprc": round(ap, 4), "n_pos": n_pos,
                        "code": line_codes[j], "line": line_texts[j]}
 
     ranked = sorted(results.items(), key=lambda x: -x[1]["auroc"])
@@ -215,9 +216,9 @@ def main():
 
     with open(out / "fyler_aurocs.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["code", "line", "auroc", "n_pos"])
+        w.writerow(["code", "line", "auroc", "auprc", "n_pos"])
         for idx, r in ranked:
-            w.writerow([r["code"], r["line"].lstrip("• "), r["auroc"], r["n_pos"]])
+            w.writerow([r["code"], r["line"].lstrip("• "), r["auroc"], r["auprc"], r["n_pos"]])
 
 
 

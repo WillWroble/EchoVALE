@@ -12,6 +12,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
+#--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/random_clips_4x768.npz \
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining/infonce_768_all.npz \
 python -u train.py \
     --h5_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/data \
@@ -21,4 +22,4 @@ python -u train.py \
     --line_filters /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/ignore_patterns.txt \
     --fields study_findings summary history \
     --epochs 50 \
-    --output_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2/results/v18
+    --output_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2/results/v23

@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import torch
 from transformers import AutoTokenizer
+from dataset import merge_soft_wraps
 
 from model import LineEncoder
 
@@ -26,6 +27,7 @@ def collect_unique_lines(h5_path, line_filters=None):
         for sid in f.keys():
             lines = [x.decode("utf-8") if isinstance(x, bytes) else x
                      for x in f[sid][()]]
+            lines = merge_soft_wraps(lines)  # add this
             if patterns:
                 lines = [l for l in lines if not any(p.search(l) for p in patterns)]
             unique.update(lines)
@@ -50,7 +52,7 @@ def encode_all(model, tokenizer, lines, batch_size, device):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--checkpoint", required=True)
+    p.add_argument("--checkpoint", default=None)
     p.add_argument("--h5_path", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--batch_size", type=int, default=512)
@@ -62,9 +64,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 
     model = LineEncoder().to(device)
-    ckpt = torch.load(args.checkpoint, weights_only=True, map_location=device)
-    model.load_state_dict(ckpt["encoder"] if "encoder" in ckpt else ckpt)
-    print("Loaded checkpoint", flush=True)
+    if args.checkpoint:
+        ckpt = torch.load(args.checkpoint, weights_only=True, map_location=device)
+        model.load_state_dict(ckpt["encoder"] if "encoder" in ckpt else ckpt)
+        print("Loaded checkpoint", flush=True)
+    else:
+        print("Using pretrained BERT (no checkpoint)", flush=True)
 
     lines = collect_unique_lines(args.h5_path, args.line_filters)
     embeddings = encode_all(model, tokenizer, lines, args.batch_size, device)

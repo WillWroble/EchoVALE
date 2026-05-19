@@ -14,11 +14,11 @@ mkdir -p logs
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining/infonce_768_all.npz \
 python -u generate_lines.py \
-    --checkpoint results/v17/latest.pt \
+    --checkpoint results/v19/best.pt \
     --video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
     --h5_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/data \
     --pool_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/train_50_modern_nofetal.txt \
     --eval_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_decoder/eval_manifest.txt \
     --line_filters /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/ignore_patterns.txt \
-    --output results/v17/line_heatmaps.json \
+    --output results/v19/line_heatmaps_v3.json \
     --threshold 0.5 "$@"

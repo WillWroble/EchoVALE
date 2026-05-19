@@ -127,17 +127,22 @@ class SkipGramDataset(Dataset):
             sub = np.random.choice(videos.shape[0], self.max_videos, replace=False)
             videos = videos[sub]
 
+        
         # Positive selection with frequency downsampling
+        """
         kept = [l for l in lines if np.random.rand() < self.line_keep_prob.get(l, 1.0)]
         if len(kept) < self.K:
             kept = lines
+        """
+        kept = lines
         sel = np.random.choice(len(kept), size=self.K, replace=False)
         positives = [kept[i] for i in sel]
 
         # Negative selection, reject if in anchor study
         negatives = []
         while len(negatives) < self.M:
-            i = np.random.choice(len(self.all_lines), p=self.neg_probs)
+            #i = np.random.choice(len(self.all_lines), p=self.neg_probs)
+            i = np.random.choice(len(self.all_lines))
             candidate = self.all_lines[i]
             if candidate not in line_set:
                 negatives.append(candidate)

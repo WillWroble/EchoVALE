@@ -67,6 +67,7 @@ def load_study_lines(h5_path, study_ids, line_filters=None):
         patterns = [re.compile(l.strip(), re.IGNORECASE)
                     for l in open(line_filters) if l.strip() and not l.startswith("#")]
     study_lines = {}
+
     ids_set = set(study_ids)
     with h5py.File(h5_path, "r") as f:
         for sid_raw in f.keys():
@@ -173,7 +174,9 @@ def main():
     p.add_argument("--fields", nargs="+", default=["study_findings", "summary", "history"])
     p.add_argument("--line_filters", default=None)
     p.add_argument("--threshold", type=float, default=0.3)
-    p.add_argument("--knn", type=int, default=10)
+    p.add_argument("--knn_findings", type=int, default=10)
+    p.add_argument("--knn_summary", type=int, default=20)
+    p.add_argument("--knn_history", type=int, default=10)
     p.add_argument("--top_k", type=int, default=10)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = p.parse_args()
@@ -205,6 +208,8 @@ def main():
     line_embs = {}
     line_to_idx = {}
     study_lines = {}
+    novel_embs = {}
+    novel_to_idx = {}
     cache_dir = Path(args.output).parent / "pool_cache"
 
     for field in args.fields:
@@ -220,17 +225,33 @@ def main():
         print(f"  Reference: {len(study_lines[field]):,} studies", flush=True)
 
         line_to_idx[field] = {l: i for i, l in enumerate(pool_lines[field])}
+        novel = sorted(set(
+            l for lines in study_lines[field].values() for l in lines
+            if l not in line_to_idx[field]
+        ))
+        if novel:
+            novel_embs[field] = encode_lines(novel, encoder, tokenizer, device)
+            novel_to_idx[field] = {l: i for i, l in enumerate(novel)}
+            print(f"  Novel: {len(novel):,} lines encoded", flush=True)
+        else:
+            novel_embs[field] = torch.zeros(0, 768)
+            novel_to_idx[field] = {}
 
     # Generate per-study, per-field
     print(f"\nGenerating heatmaps...", flush=True)
     results = []
+    knns = {
+        "study_findings": args.knn_findings,
+        "summary": args.knn_summary,
+        "history": args.knn_history,
+    }
     for i, sid in enumerate(ids):
         videos = video_embs[sid]
         result = {"study_id": sid}
 
         for field in args.fields:
             scores = score_study(line_embs[field], videos, pool, device)
-            hotspots = find_hotspots(scores, line_embs[field], args.threshold, args.knn)
+            hotspots = find_hotspots(scores, line_embs[field], args.threshold, knns[field])
 
             hotspot_data = []
             for h_members in hotspots:
@@ -240,17 +261,30 @@ def main():
                     for idx, score in top
                 ])
 
+
             ref_lines = study_lines[field].get(sid, [])
             ref_data = []
             n_unmapped = 0
+
+            # Batch-score novel lines for this study
+            novel_ref = [line for line in ref_lines
+                         if line not in line_to_idx[field] and line in novel_to_idx[field]]
+            novel_scores = {}
+            if novel_ref:
+                idxs = [novel_to_idx[field][l] for l in novel_ref]
+                ns = score_study(novel_embs[field][idxs], videos, pool, device)
+                novel_scores = {l: float(ns[k]) for k, l in enumerate(novel_ref)}
+
             for line in ref_lines:
                 idx = line_to_idx[field].get(line)
                 if idx is not None:
                     ref_data.append({"text": line, "score": round(float(scores[idx]), 4)})
+                elif line in novel_scores:
+                    ref_data.append({"text": line, "score": round(novel_scores[line], 4), "ood": True})
                 else:
                     ref_data.append({"text": line, "score": None})
                     n_unmapped += 1
-
+            
             top_scores = np.sort(scores)[::-1]
 
             result[field] = {

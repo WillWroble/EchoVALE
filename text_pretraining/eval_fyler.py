@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.linear_model import RidgeClassifier
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.preprocessing import StandardScaler
 
 
@@ -126,8 +126,10 @@ def main():
         clf.fit(X_tr, y_tr[:, j])
         scores = clf.decision_function(X_va)
         auroc = roc_auc_score(y_va[:, j], scores)
-        results[code] = {"auroc": round(auroc, 4), "n_pos_train": n_pos_tr, "n_pos_val": n_pos_va}
-
+        auprc = average_precision_score(y_va[:, j], scores)
+        results[code] = {"auroc": round(auroc, 4), "auprc": round(auprc, 4),
+                         "n_pos_train": n_pos_tr, "n_pos_val": n_pos_va}
+        
     ranked = sorted(results.items(), key=lambda x: -x[1]["auroc"])
 
     print(f"\n{'Code':>6}  {'AUROC':>7}  {'N+tr':>6}  {'N+va':>6}  Description")
@@ -150,10 +152,10 @@ def main():
 
     with open(out / "fyler_aurocs.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["code", "description", "auroc", "n_pos_train", "n_pos_val"])
+        w.writerow(["code", "description", "auroc", "auprc", "n_pos_train", "n_pos_val"])
         for code, r in ranked:
             desc = code_to_desc.get(code, "")
-            w.writerow([code, desc, r["auroc"], r["n_pos_train"], r["n_pos_val"]])
+            w.writerow([code, desc, r["auroc"], r["auprc"], r["n_pos_train"], r["n_pos_val"]])
 
     print(f"\nSaved to {out}")
 
