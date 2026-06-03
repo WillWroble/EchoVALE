@@ -54,6 +54,7 @@ def collect_pool_lines(h5_path, manifest_path, line_filters=None):
                 continue
             lines = [x.decode("utf-8") if isinstance(x, bytes) else x for x in f[sid_raw][()]]
             lines = merge_soft_wraps(lines)
+            lines = [l.lstrip("\u2022 ").strip() for l in lines]
             if patterns:
                 lines = [l for l in lines if not any(p.search(l) for p in patterns)]
             unique.update(lines)
@@ -76,6 +77,7 @@ def load_study_lines(h5_path, study_ids, line_filters=None):
                 continue
             lines = [x.decode("utf-8") if isinstance(x, bytes) else x for x in f[sid_raw][()]]
             lines = merge_soft_wraps(lines)
+            lines = [l.lstrip("\u2022 ").strip() for l in lines]
             if patterns:
                 lines = [l for l in lines if not any(p.search(l) for p in patterns)]
             study_lines[sid] = lines
@@ -123,6 +125,7 @@ def score_study(line_embs, videos, pool, device):
     video_mask = torch.ones(1, videos_t.shape[1], device=device)
     attended = pool(line_embs.unsqueeze(0), videos_t, video_mask)
     logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
+    #logits = attended.squeeze(-1)
     return torch.sigmoid(logits).squeeze(0).cpu().numpy()
 
 def find_hotspots(scores, line_embs, threshold=0.3, knn=10):
@@ -182,7 +185,8 @@ def main():
     args = p.parse_args()
 
     device = torch.device(args.device)
-    tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+    #tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+    tokenizer = AutoTokenizer.from_pretrained("michiyasunaga/BioLinkBERT-large")
 
     encoder = LineEncoder().to(device)
     pool = CrossAttentionPool(dim=768).to(device)

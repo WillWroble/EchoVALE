@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import sys
 sys.path.insert(0, "/lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA")
 
-from src.models.vision_transformer import vit_base
+from src.models.vision_transformer import vit_base, vit_large
 from src.datasets.video_dataset import VideoDataset
 
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1, 1)
@@ -35,7 +35,7 @@ class ClipTransform:
 
 
 def load_encoder(checkpoint_path, device):
-    model = vit_base(
+    model = vit_large(
         img_size=(224, 224),
         patch_size=16,
         num_frames=16,

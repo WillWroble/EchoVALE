@@ -36,6 +36,7 @@ def run_step(encoder, attn_pool, batch, device, L):
     line_embs = line_embs.view(B, L, -1)
     attended = attn_pool(line_embs, videos, video_mask)
     logits = (line_embs * attended).sum(dim=-1)
+    #logits = (attended).sum(dim=-1)
     loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels)
     return loss, labels.size(0)
 

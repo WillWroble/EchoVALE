@@ -13,8 +13,8 @@ cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/text_pretraining
 python -u embed.py \
     --checkpoint results/full_contrast_jepa_v1/latest.pt \
     --h5_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/Line_Embeddings_v2 \
-    --train_manifest manifests/train_50_nofetal.txt \
-    --val_manifest manifests/val_50_nofetal.txt \
-    --output results/full_contrast_jepa_v1/eval/embeddings.npz \
+    --train_manifest ../manifests/study_train_50.txt \
+    --val_manifest ../manifests/study_outside.txt \
+    --output results/full_contrast_jepa_v1/eval_external/embeddings.npz \
     --echofocus_checkpoint results/full_contrast_jepa_v1/echofocus_latest.pt \
-    --video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz
+    --video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x768_fixed_plus_outside.npz

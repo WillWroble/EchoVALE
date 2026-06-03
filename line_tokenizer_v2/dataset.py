@@ -73,6 +73,7 @@ class SkipGramDataset(Dataset):
                     lines = [x.decode("utf-8") if isinstance(x, bytes) else x
                              for x in f[sid_raw][()]]
                     lines = merge_soft_wraps(lines)
+                    lines = [l.lstrip("\u2022 ").strip() for l in lines]
                     lines = [l for l in lines if keep(l)]
                     if len(lines) >= self.K:
                         self.study_lines[sid] = lines
@@ -102,7 +103,8 @@ class SkipGramDataset(Dataset):
 
         # Pre-tokenize all unique lines
         from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+        #tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+        tokenizer = AutoTokenizer.from_pretrained("michiyasunaga/BioLinkBERT-large")
         all_unique = list(set(l for lines in self.study_lines.values() for l in lines))
         print(f"  Pre-tokenizing {len(all_unique):,} unique lines ...", flush=True)
         enc = tokenizer(all_unique, padding="max_length", truncation=True,
@@ -129,20 +131,20 @@ class SkipGramDataset(Dataset):
 
         
         # Positive selection with frequency downsampling
-        """
+        
         kept = [l for l in lines if np.random.rand() < self.line_keep_prob.get(l, 1.0)]
         if len(kept) < self.K:
             kept = lines
-        """
-        kept = lines
+        
+        #kept = lines
         sel = np.random.choice(len(kept), size=self.K, replace=False)
         positives = [kept[i] for i in sel]
 
         # Negative selection, reject if in anchor study
         negatives = []
         while len(negatives) < self.M:
-            #i = np.random.choice(len(self.all_lines), p=self.neg_probs)
-            i = np.random.choice(len(self.all_lines))
+            i = np.random.choice(len(self.all_lines), p=self.neg_probs)
+            #i = np.random.choice(len(self.all_lines))
             candidate = self.all_lines[i]
             if candidate not in line_set:
                 negatives.append(candidate)

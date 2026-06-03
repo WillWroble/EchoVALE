@@ -29,7 +29,8 @@ def load_fyler_lines(path):
         for row in reader:
             #texts.append(CODE_RE.sub('', row['line']).strip())
             #texts.append("• " + CODE_RE.sub('', row['line']).strip())
-            texts.append("• " + row['line'].strip())
+            #texts.append("• " + row['line'].strip())
+            texts.append("" + row['line'].strip())
             codes.append(row['fyler_code'])
     return texts, codes
 
@@ -80,6 +81,7 @@ def score_study(encoder, pool, line_embs, videos, device):
     with torch.no_grad():
         attended = pool(line_embs.unsqueeze(0), videos_t, video_mask)
         logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
+        #logits = attended.squeeze(-1)
     return torch.sigmoid(logits).squeeze(0).cpu().numpy()
 
 def main():
@@ -156,7 +158,8 @@ def main():
         pool.eval()
 
         # Encode all Fyler lines
-        tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+        #tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+        tokenizer = AutoTokenizer.from_pretrained("michiyasunaga/BioLinkBERT-large")
         line_embs = encode_lines(line_texts, tokenizer, encoder, device)
         print(f"Encoded {line_embs.shape[0]} lines -> {line_embs.shape[1]}d", flush=True)
 

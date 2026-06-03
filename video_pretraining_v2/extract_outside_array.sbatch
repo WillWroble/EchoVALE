@@ -19,8 +19,8 @@ export OMP_NUM_THREADS=4
 python -u extract_jepa_clips.py \
     --avi_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/echo_outside_avis.txt \
     --study_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/study_outside.txt \
-    --encoder_checkpoint /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/checkpoints/echojepa_vitb_bch/latest.pt \
-    --output_dir embeddings/shards_outside \
+    --encoder_checkpoint /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/checkpoints/echojepa_vitb_platon/epoch_day_5.pt \
+    --output_dir embeddings/shards_platon_outside \
     --num_clips 4 \
     --batch_size 32 \
     --n_tasks 8

@@ -7,7 +7,9 @@ from transformers import AutoModel
 
 class LineEncoder(nn.Module):
 
-    def __init__(self, model_name="emilyalsentzer/Bio_ClinicalBERT"):
+    #"emilyalsentzer/Bio_ClinicalBERT"
+
+    def __init__(self, model_name="michiyasunaga/BioLinkBERT-large", dim=1024):
         super().__init__()
         self.bert = AutoModel.from_pretrained(model_name)
 
@@ -17,13 +19,15 @@ class LineEncoder(nn.Module):
             param.requires_grad = True
         for param in self.bert.encoder.layer[-2].parameters():
             param.requires_grad = True
-
+        #for param in self.bert.encoder.layer[-3].parameters():
+            #param.requires_grad = True
         self.proj = nn.Sequential(
-            nn.LayerNorm(768),
-            nn.Linear(768, 3072),
+            nn.LayerNorm(dim),
+            nn.Linear(dim, 4*dim),
             nn.GELU(),
-            nn.Linear(3072, 768),
+            nn.Linear(4*dim, dim),
         )
+
 
     def forward(self, input_ids, attention_mask):
         out = self.bert(input_ids=input_ids, attention_mask=attention_mask)
@@ -71,34 +75,33 @@ class CrossAttentionPool(nn.Module):
         #return out
         return self.proj(out)
 
-
 """
 
 class CrossAttentionPool(nn.Module):
-    def __init__(self, dim=768, num_heads=12):
+    def __init__(self, dim=1024, num_heads=16):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
         
         # clip self-attention
-        """
-        self.clip_sa = nn.TransformerEncoderLayer(
-            d_model=dim, nhead=num_heads, dim_feedforward=3072,
-            batch_first=True, norm_first=True,
-        )
-        """
+        
+        #self.clip_sa = nn.TransformerEncoderLayer(
+        #    d_model=dim, nhead=num_heads, dim_feedforward=3072,
+        #    batch_first=True, norm_first=True,
+        #)
+        
         # cross-attention
-        self.W_Q = nn.Linear(768, dim, bias=False)
+        self.W_Q = nn.Linear(dim, dim, bias=False)
         self.W_K = nn.Linear(dim, dim, bias=False)
         self.W_V = nn.Linear(dim, dim)
         #self.W_O = nn.Linear(dim, dim)
 
         self.proj = nn.Sequential(
-            nn.LayerNorm(768),
-            nn.Linear(768, 3072),
+            nn.LayerNorm(dim),
+            nn.Linear(dim, 4*dim),
             nn.GELU(),
-            nn.Linear(3072, 768),
+            nn.Linear(4*dim, dim),
         )
 
     def forward(self, lines, videos, video_mask):
@@ -110,6 +113,7 @@ class CrossAttentionPool(nn.Module):
         
         # self-attend over clips
         #videos = self.clip_sa(videos, src_key_padding_mask=(video_mask == 0))
+        
         # cross-attention
         Q = self.W_Q(lines).view(B, L, h, d).transpose(1, 2)   # (B, h, L, d)
         K = self.W_K(videos).view(B, V, h, d).transpose(1, 2)   # (B, h, V, d)
@@ -119,9 +123,15 @@ class CrossAttentionPool(nn.Module):
         mask = video_mask[:, None, None, :] == 0                 # (B, 1, 1, V)
         scores = scores.masked_fill(mask, -1e9)
         weights = scores.softmax(dim=-1)
+        
+        #mask = video_mask[:, None, :, None] == 1                  # (B, 1, V, 1)
+        #Vs = Vs*mask
 
         out = torch.einsum("bhlv,bhvd->bhld", weights, Vs)
+        #out = Vs.sum(2) / video_mask.sum(1).view(B, 1, 1) #(B, h, d)
+        #out = out.unsqueeze(2)
+        #out = out.expand(-1, -1, L, -1) #(B,h,L,d)
+
         out = out.transpose(1, 2).contiguous().view(B, L, -1)   # (B, L, dim)
-        #out = self.W_O(out)
 
         return self.proj(out)
