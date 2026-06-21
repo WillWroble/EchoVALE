@@ -96,7 +96,7 @@ def main():
     print("Loaded checkpoint", flush=True)
 
     # Encode lines
-    tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+    tokenizer = AutoTokenizer.from_pretrained("michiyasunaga/BioLinkBERT-large")
     tokens = tokenizer(LINES, padding=True, truncation=True,
                        max_length=128, return_tensors="pt")
     lines_encoded = encoder(tokens.input_ids.to(device),

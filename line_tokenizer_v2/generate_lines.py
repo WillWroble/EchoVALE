@@ -189,7 +189,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("michiyasunaga/BioLinkBERT-large")
 
     encoder = LineEncoder().to(device)
-    pool = CrossAttentionPool(dim=768).to(device)
+    pool = CrossAttentionPool().to(device)
     ckpt = torch.load(args.checkpoint, weights_only=True, map_location=device)
     encoder.load_state_dict(ckpt["encoder"])
     pool.load_state_dict(ckpt["attn_pool"])
@@ -238,7 +238,7 @@ def main():
             novel_to_idx[field] = {l: i for i, l in enumerate(novel)}
             print(f"  Novel: {len(novel):,} lines encoded", flush=True)
         else:
-            novel_embs[field] = torch.zeros(0, 768)
+            novel_embs[field] = torch.zeros(0, 1024)
             novel_to_idx[field] = {}
 
     # Generate per-study, per-field

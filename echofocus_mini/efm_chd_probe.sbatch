@@ -16,9 +16,9 @@ cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/echofocus_mini
 mkdir -p logs
 
 python -u train_echofocusmini_chd.py \
-    --embeddings ../video_pretraining_v2/embeddings/jepa_clips_4x768_fixed_plus_outside.npz \
-    --train_manifest ../manifests/study_train_50.txt \
-    --val_manifest ../manifests/study_outside.txt \
-    --output_dir results/chd_jepa_v4_external \
-    --min_pos 1 \
+    --embeddings ../video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
+    --train_manifest ../manifests/platon_train.txt \
+    --val_manifest ../manifests/platon_val.txt \
+    --output_dir results/768_jepa_chd_platon \
+    --min_pos 5 \
     --n_videos 48

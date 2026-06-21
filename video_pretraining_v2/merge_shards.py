@@ -24,7 +24,8 @@ def main():
         print(f"  {shard_path.name}: {len(d['embeddings'])} clips", flush=True)
 
     embeddings = np.concatenate(all_embs)
-    study_ids = np.concatenate(all_sids)
+    #study_ids = np.concatenate(all_sids)
+    study_ids = np.concatenate(all_sids).astype(np.int64)
     video_ids = np.concatenate(all_vids)
 
     print(f"Total: {len(embeddings)} clips, {len(np.unique(study_ids))} studies", flush=True)

@@ -126,7 +126,7 @@ def main():
 
     # ---- model ----
     encoder = LineEncoder().to(device)
-    attn_pool = CrossAttentionPool(dim=768).to(device)
+    attn_pool = CrossAttentionPool().to(device)
 
     if args.checkpoint:
         ckpt = torch.load(args.checkpoint, weights_only=True)

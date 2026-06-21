@@ -10,5 +10,5 @@ conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public
 
 python -u Echo_Clip/video_pretraining_v2/merge_shards_hdf5.py \
-    --shard_dir Echo_Clip/video_pretraining_v2/embeddings/shards_platon_1024d \
-    --hdf5_output_dir Echo_JEPA_Embeddings/1024d
+    --shard_dir Echo_Clip/video_pretraining_v2/embeddings/shards_platon_1024d_outside \
+    --hdf5_output_dir Echo_JEPA_Embeddings/1024d_outside

@@ -10,5 +10,5 @@ conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2
 
 python -u merge_shards.py \
-    --shard_dir embeddings/shards_platon_1024d \
-    --output embeddings/jepa_clips_4x1024_platon.npz
+    --shard_dir embeddings/fl/mode1/internal/round_240_shards_outside \
+    --output embeddings/fl/mode1/internal/round_240_outside.npz
