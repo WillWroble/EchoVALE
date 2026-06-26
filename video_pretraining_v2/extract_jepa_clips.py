@@ -35,7 +35,7 @@ class ClipTransform:
 
 
 def load_encoder(checkpoint_path, device):
-    model = vit_base(
+    model = vit_large(
         img_size=(224, 224),
         patch_size=16,
         num_frames=16,

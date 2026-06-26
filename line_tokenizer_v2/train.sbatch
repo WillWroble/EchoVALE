@@ -24,7 +24,7 @@ python -u train.py \
     --line_filters /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/ignore_patterns.txt \
     --fields study_findings summary history \
     --epochs 50 \
-    --output_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2/results/v35b
+    --output_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2/results/v42
     #--checkpoint results/v31/best.pt \
     #--lr 3.8e-5 \
     #--warmup_frac 0

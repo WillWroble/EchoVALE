@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from model import LineEncoder, CrossAttentionPool
+from model_SA import LineEncoder, CrossAttentionPool  #, QuerySAPool
 from dataset import SkipGramDataset, collate_fn, load_videos_by_study, FIELD_CONFIG
 
 
@@ -127,6 +127,8 @@ def main():
     # ---- model ----
     encoder = LineEncoder().to(device)
     attn_pool = CrossAttentionPool().to(device)
+    #attn_pool = QuerySAPool().to(device)
+
 
     if args.checkpoint:
         ckpt = torch.load(args.checkpoint, weights_only=True)

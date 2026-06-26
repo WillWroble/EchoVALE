@@ -12,6 +12,6 @@ cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/echofocus_mini
 
 python -u eval_external_chd.py \
     --checkpoint results/768_jepa_chd_platon/best.pt \
-    --embeddings ../video_pretraining_v2/embeddings/jepa_clips_4x768_fixed.npz \
+    --embeddings ../video_pretraining_v2/embeddings/fl/mode3/internal/round_240_outside.npz \
     --train_manifest ../manifests/platon_train.txt \
     --output_dir results/768_jepa_chd_platon/external

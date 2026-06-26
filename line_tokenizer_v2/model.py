@@ -34,48 +34,37 @@ class LineEncoder(nn.Module):
         cls = out.last_hidden_state[:, 0]
         return self.proj(cls)
 
-"""
-class CrossAttentionPool(nn.Module):
-    #Per-line cross-attention over a study's videos
 
-    def __init__(self, dim=768):
+class QuerySAPool(nn.Module):
+    """Prepend query token to clips, run SA, classify query output."""
+
+    def __init__(self, dim=1024, num_heads=16, n_layers=2):
         super().__init__()
-
-
-        self.W_Q = nn.Linear(768, dim, bias=False)
-        self.W_K = nn.Linear(dim, dim, bias=False)
-        self.W_V = nn.Linear(dim, dim)
-        self.scale = dim ** -0.5
-        
-        self.proj = nn.Sequential(
-            nn.LayerNorm(768),
-            nn.Linear(768, 3072),
-            nn.GELU(),
-            nn.Linear(3072, 768),
+        layer = nn.TransformerEncoderLayer(
+            d_model=dim, nhead=num_heads, dim_feedforward=1*dim,
+            batch_first=True, norm_first=True,
         )
-        
+        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        self.head = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, 1),
+        )
 
     def forward(self, lines, videos, video_mask):
-        
-        #lines:      (B, L, D)
-        #videos:     (B, V, D)
-        #video_mask: (B, V) — 1 for real, 0 for pad
-        #returns:    (B, L, D) attended pool per line, in raw video space
-        
-        #videos = self.proj(videos)
-        Q = self.W_Q(lines)
-        K = self.W_K(videos)
-        #V = videos
-        V = self.W_V(videos)
-        scores = torch.einsum("bld,bvd->blv", Q, K) * self.scale
-        mask = video_mask.unsqueeze(1) == 0
-        scores = scores.masked_fill(mask, -1e9)
-        weights = scores.softmax(dim=-1)
-        out = torch.einsum("blv,bvd->bld", weights, V)
-        #return out
-        return self.proj(out)
+        B, L, D = lines.shape
+        V = videos.shape[1]
 
-"""
+        # (B*L, 1+V, D)
+        queries = lines.reshape(B * L, 1, D)
+        videos_exp = videos.unsqueeze(1).expand(B, L, V, D).reshape(B * L, V, D)
+        seq = torch.cat([queries, videos_exp], dim=1)
+
+        # mask: query always valid, clips follow video_mask
+        clip_mask = video_mask.unsqueeze(1).expand(B, L, V).reshape(B * L, V)
+        pad_mask = torch.cat([clip_mask.new_zeros(B * L, 1), 1 - clip_mask], dim=1).bool()
+
+        out = self.encoder(seq, src_key_padding_mask=pad_mask)
+        return self.head(out[:, 0]).view(B, L, 1)
 
 class CrossAttentionPool(nn.Module):
     def __init__(self, dim=1024, num_heads=16):
@@ -95,20 +84,19 @@ class CrossAttentionPool(nn.Module):
         self.W_Q = nn.Linear(dim, dim, bias=False)
         self.W_K = nn.Linear(dim, dim, bias=False)
         self.W_V = nn.Linear(dim, dim)
-        #self.W_O = nn.Linear(dim, dim)
 
         self.proj = nn.Sequential(
             nn.LayerNorm(dim),
-            nn.Linear(dim, 4*dim),
+            nn.Linear(dim, dim//2),
             nn.GELU(),
-            nn.Linear(4*dim, dim),
+            nn.Linear(dim//2, 1),
         )
-        self.V_proj = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.Linear(dim, 4*dim),
-            nn.GELU(),
-            nn.Linear(4*dim, dim),
-        )
+        #self.V_proj = nn.Sequential(
+        #    nn.LayerNorm(dim),
+        #    nn.Linear(dim, 4*dim),
+        #    nn.GELU(),
+        #    nn.Linear(4*dim, dim),
+        #)
 
     def forward(self, lines, videos, video_mask):
         B, L, _ = lines.shape

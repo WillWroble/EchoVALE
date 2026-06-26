@@ -34,6 +34,49 @@ class LineEncoder(nn.Module):
         cls = out.last_hidden_state[:, 0]
         return self.proj(cls)
 
+"""
+class CrossAttentionPool(nn.Module):
+    #Per-line cross-attention over a study's videos
+
+    def __init__(self, dim=768):
+        super().__init__()
+
+
+        self.W_Q = nn.Linear(768, dim, bias=False)
+        self.W_K = nn.Linear(dim, dim, bias=False)
+        self.W_V = nn.Linear(dim, dim)
+        self.scale = dim ** -0.5
+        
+        self.proj = nn.Sequential(
+            nn.LayerNorm(768),
+            nn.Linear(768, 3072),
+            nn.GELU(),
+            nn.Linear(3072, 768),
+        )
+        
+
+    def forward(self, lines, videos, video_mask):
+        
+        #lines:      (B, L, D)
+        #videos:     (B, V, D)
+        #video_mask: (B, V) — 1 for real, 0 for pad
+        #returns:    (B, L, D) attended pool per line, in raw video space
+        
+        #videos = self.proj(videos)
+        Q = self.W_Q(lines)
+        K = self.W_K(videos)
+        #V = videos
+        V = self.W_V(videos)
+        scores = torch.einsum("bld,bvd->blv", Q, K) * self.scale
+        mask = video_mask.unsqueeze(1) == 0
+        scores = scores.masked_fill(mask, -1e9)
+        weights = scores.softmax(dim=-1)
+        out = torch.einsum("blv,bvd->bld", weights, V)
+        #return out
+        return self.proj(out)
+
+"""
+
 class CrossAttentionPool(nn.Module):
     def __init__(self, dim=1024, num_heads=16):
         super().__init__()
@@ -48,20 +91,19 @@ class CrossAttentionPool(nn.Module):
         #    batch_first=True, norm_first=True,
         #)
         
-        
-        layer = nn.TransformerEncoderLayer(
-            d_model=dim, nhead=num_heads, dim_feedforward=2*dim,
-            batch_first=True, norm_first=True,
-        )
-
-        self.clip_sa = nn.TransformerEncoder(layer, num_layers=4)
         # cross-attention
-        #self.W_Q = nn.Linear(dim, dim, bias=False)
-        #self.W_K = nn.Linear(dim, dim, bias=False)
-        #self.W_V = nn.Linear(dim, dim)
+        self.W_Q = nn.Linear(dim, dim, bias=False)
+        self.W_K = nn.Linear(dim, dim, bias=False)
+        self.W_V = nn.Linear(dim, dim)
         #self.W_O = nn.Linear(dim, dim)
 
         self.proj = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, dim//2),
+            nn.GELU(),
+            nn.Linear(dim//2, 1),
+        )
+        self.V_proj = nn.Sequential(
             nn.LayerNorm(dim),
             nn.Linear(dim, 4*dim),
             nn.GELU(),
@@ -76,32 +118,29 @@ class CrossAttentionPool(nn.Module):
         h, d = self.num_heads, self.head_dim
         
         # self-attend over clips
-        videos = self.clip_sa(videos, src_key_padding_mask=(video_mask == 0))
-        #Vs = videos
+        #videos = self.clip_sa(videos, src_key_padding_mask=(video_mask == 0))
+        
+        videos = self.V_proj(videos)
+        
         # cross-attention
-        #Q = self.W_Q(lines).view(B, L, h, d).transpose(1, 2)   # (B, h, L, d)
-        #K = self.W_K(videos).view(B, V, h, d).transpose(1, 2)   # (B, h, V, d)
-        #Vs = self.W_V(videos).view(B, V, h, d).transpose(1, 2)  # (B, h, V, d)
+        Q = self.W_Q(lines).view(B, L, h, d).transpose(1, 2)   # (B, h, L, d)
+        K = self.W_K(videos).view(B, V, h, d).transpose(1, 2)   # (B, h, V, d)
+        Vs = self.W_V(videos).view(B, V, h, d).transpose(1, 2)  # (B, h, V, d)
 
-        #scores = torch.einsum("bhld,bhvd->bhlv", Q, K) * self.scale
-        #mask = video_mask[:, None, None, :] == 0                 # (B, 1, 1, V)
-        #scores = scores.masked_fill(mask, -1e9)
-        #weights = scores.softmax(dim=-1)
+        scores = torch.einsum("bhld,bhvd->bhlv", Q, K) * self.scale
+        mask = video_mask[:, None, None, :] == 0                 # (B, 1, 1, V)
+        scores = scores.masked_fill(mask, -1e9)
+        weights = scores.softmax(dim=-1)
         
         #mask = video_mask[:, None, :, None] == 1                  # (B, 1, V, 1)
         #Vs = Vs*mask
 
-        #out = torch.einsum("bhlv,bhvd->bhld", weights, Vs)
+        out = torch.einsum("bhlv,bhvd->bhld", weights, Vs)
         
         #out = Vs.sum(2) / video_mask.sum(1).view(B, 1, 1) #(B, h, d)
         #out = out.unsqueeze(2)
         #out = out.expand(-1, -1, L, -1) #(B,h,L,d)
 
-        mask = video_mask.unsqueeze(-1)                      # (B, V, 1)
-        out = (videos * mask).sum(1) / video_mask.sum(1).unsqueeze(-1)  # (B, 1024)
-        out = out.unsqueeze(1).expand(-1, L, -1)
-        
-        
-        #out = out.transpose(1, 2).contiguous().view(B, L, -1)   # (B, L, dim)
+        out = out.transpose(1, 2).contiguous().view(B, L, -1)   # (B, L, dim)
 
         return self.proj(out)
