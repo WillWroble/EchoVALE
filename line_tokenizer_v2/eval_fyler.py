@@ -16,7 +16,7 @@ import torch
 from transformers import AutoTokenizer
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-from model import LineEncoder, CrossAttentionPool
+from model_SA import LineEncoder, CrossAttentionPool#, QuerySAPool
 
 CODE_RE = re.compile(r'\s*\[\d+\]\s*$')
 
@@ -73,17 +73,30 @@ def score_study(pool, line_embs, videos, device):
     logits = (line_embs * attended).sum(dim=-1)
     return torch.sigmoid(logits).detach().cpu().numpy()
     #return torch.sigmoid(logits).cpu().numpy()
-"""
+
 def score_study(encoder, pool, line_embs, videos, device):
     line_embs = line_embs.to(device)
     videos_t = torch.from_numpy(videos).unsqueeze(0).to(device)
     video_mask = torch.ones(1, videos_t.shape[1], device=device)
     with torch.no_grad():
         attended = pool(line_embs.unsqueeze(0), videos_t, video_mask)
-        logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
-        #logits = attended.squeeze(-1)
+        #logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
+        logits = attended.squeeze(-1)
     return torch.sigmoid(logits).squeeze(0).cpu().numpy()
-
+"""
+def score_study(encoder, pool, line_embs, videos, device, batch_size=256):
+    videos_t = torch.from_numpy(videos).unsqueeze(0).to(device)
+    video_mask = torch.ones(1, videos_t.shape[1], device=device)
+    all_scores = []
+    with torch.no_grad():
+        for i in range(0, len(line_embs), batch_size):
+            chunk = line_embs[i:i+batch_size].unsqueeze(0).to(device)
+            vm = video_mask  # same for all chunks
+            attended = pool(chunk, videos_t, vm)
+            logits = (chunk * attended).sum(dim=-1)
+            #logits = attended.squeeze(-1)
+            all_scores.append(torch.sigmoid(logits).squeeze(0).cpu())
+    return torch.cat(all_scores).numpy()
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--checkpoint", required=True)
@@ -151,6 +164,7 @@ def main():
         # Load model
         encoder = LineEncoder().to(device)
         pool = CrossAttentionPool().to(device)
+        #pool = QuerySAPool().to(device)
         ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
         encoder.load_state_dict(ckpt["encoder"])
         pool.load_state_dict(ckpt["attn_pool"])

@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from model_SA import LineEncoder, CrossAttentionPool  #, QuerySAPool
+from model_SA import LineEncoder, CrossAttentionPool#, QuerySAPool
 from dataset import SkipGramDataset, collate_fn, load_videos_by_study, FIELD_CONFIG
 
 
@@ -23,7 +23,7 @@ def get_cosine_schedule(optimizer, warmup_steps, total_steps):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
-def run_step(encoder, attn_pool, batch, device, L):
+def run_step(encoder, attn_pool, batch, device, L, dataset=None, tau=1.5):
     input_ids, attn_mask, videos, video_mask, labels = batch
     input_ids = input_ids.to(device)
     attn_mask = attn_mask.to(device)
@@ -34,10 +34,21 @@ def run_step(encoder, attn_pool, batch, device, L):
     line_embs = encoder(input_ids, attn_mask)
     B = videos.shape[0]
     line_embs = line_embs.view(B, L, -1)
+    
+    if dataset is not None:
+        neg_ids, neg_mask = dataset.sample_negatives(32)
+        neg_ids, neg_mask = neg_ids.to(device), neg_mask.to(device)
+        neg_embs = encoder(neg_ids, neg_mask)
+        neg_embs = neg_embs.unsqueeze(0).expand(B, -1, -1)
+        line_embs = torch.cat([line_embs, neg_embs], dim=1)
+        neg_labels = torch.zeros(B, 32, device=device)
+        labels = labels.to(device).view(B, dataset.K)
+        labels = torch.cat([labels, neg_labels], dim=1)
+
     attended = attn_pool(line_embs, videos, video_mask)
     logits = (line_embs * attended).sum(dim=-1)
     #logits = (attended).sum(dim=-1)
-    loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels)
+    loss = F.binary_cross_entropy_with_logits(logits.view(-1) / tau, labels.view(-1))
     return loss, labels.size(0)
 
 
@@ -50,7 +61,7 @@ def run_val(encoder, attn_pool, loaders, field_L, device):
             L = field_L[field]
             total_loss, total_n = 0.0, 0
             for batch in loader:
-                loss, n = run_step(encoder, attn_pool, batch, device, L)
+                loss, n = run_step(encoder, attn_pool, batch, device, L, dataset=loader.dataset)
                 total_loss += loss.item() * n
                 total_n += n
             field_losses[field] = total_loss / total_n
@@ -69,13 +80,13 @@ def main():
     # sampling
     p.add_argument("--fields", nargs="+", default=["study_findings", "summary", "history"])
     p.add_argument("--subsample_t", type=float, default=1e-3)
-    p.add_argument("--max_videos", type=int, default=128)
+    p.add_argument("--max_videos", type=int, default=64)
     p.add_argument("--line_filters", default=None)
 
     # training
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--weight_decay", type=float, default=0.01)
-    p.add_argument("--batch_size", type=int, default=8)
+    p.add_argument("--batch_size", type=int, default=64)
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--warmup_frac", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=42)
@@ -117,7 +128,7 @@ def main():
                                     line_filters=args.line_filters)
         val_ds = SkipGramDataset(args.h5_dir, val_ids, videos_by_study, field=field,
                                   subsample_t=args.subsample_t, max_videos=args.max_videos,
-                                  line_filters=args.line_filters)
+                                  line_filters=args.line_filters, clip_dropout=0.8)
 
         train_loaders[field] = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
                                           drop_last=True, num_workers=4, collate_fn=collate_fn)
@@ -168,7 +179,7 @@ def main():
 
         for field in schedule:
             batch = next(iters[field])
-            loss, n = run_step(encoder, attn_pool, batch, device, field_L[field])
+            loss, n = run_step(encoder, attn_pool, batch, device, field_L[field], dataset=train_loaders[field].dataset)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(

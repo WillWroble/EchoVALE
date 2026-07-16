@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=60G
-#SBATCH --time=8:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --array=0-7
 ##SBATCH --exclude=gpu-b11-1,gpu-b11-2,gpu-b11-3
 set -e
@@ -19,8 +19,8 @@ export OMP_NUM_THREADS=4
 python -u extract_jepa_clips.py \
     --avi_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/avi_manifest_bermuda.csv \
     --study_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/study_bermuda.txt \
-    --encoder_checkpoint /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/checkpoints/echojepa_vitl_platon_mimic/latest.pt \
-    --output_dir embeddings/shards_bermuda \
+    --encoder_checkpoint /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/checkpoints/echojepa_vitl_mimic_bch_cooldown/latest.pt \
+    --output_dir embeddings/echojepa_vitl_mimic_bch_cooldown_bermuda_shards \
     --num_clips 4 \
     --batch_size 16 \
     --n_tasks 8

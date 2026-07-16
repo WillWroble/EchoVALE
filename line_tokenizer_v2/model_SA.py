@@ -54,7 +54,7 @@ class CrossAttentionPool(nn.Module):
             batch_first=True, norm_first=True,
         )
 
-        self.clip_sa = nn.TransformerEncoder(layer, num_layers=4)
+        self.clip_sa = nn.TransformerEncoder(layer, num_layers=2)
         # cross-attention
         #self.W_Q = nn.Linear(dim, dim, bias=False)
         #self.W_K = nn.Linear(dim, dim, bias=False)

@@ -25,7 +25,7 @@ from transformers import AutoTokenizer
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
-from model import LineEncoder, CrossAttentionPool
+from model_SA import LineEncoder, CrossAttentionPool#, QuerySAPool
 from dataset import merge_soft_wraps
 
 
@@ -37,7 +37,23 @@ def load_video_embeddings_by_study(npz_path):
         by_study.setdefault(sid, []).append(emb)
     return {k: np.stack(v).astype(np.float32) for k, v in by_study.items()}
 
+@torch.no_grad()
+def build_percentile_ref(line_embs, video_embs, train_ids, pool, device, batch_size=256):
+    """Score pool lines against all training studies for percentile normalization."""
+    all_scores = np.zeros((len(train_ids), len(line_embs)), dtype=np.float32)
+    for i, sid in enumerate(train_ids):
+        all_scores[i] = score_study(line_embs, video_embs[sid], pool, device, batch_size)
+        if (i + 1) % 500 == 0:
+            print(f"    Percentile ref: {i+1}/{len(train_ids)}", flush=True)
+    
+    return np.sort(all_scores, axis=0)
 
+def to_percentiles(raw_scores, sorted_ref):
+    n = sorted_ref.shape[0]
+    result = np.empty(len(raw_scores), dtype=np.float32)
+    for j in range(len(raw_scores)):
+        result[j] = np.searchsorted(sorted_ref[:, j], raw_scores[j]) / n
+    return result
 def collect_pool_lines(h5_path, manifest_path, line_filters=None):
     patterns = []
     if line_filters:
@@ -117,17 +133,30 @@ def get_or_encode_lines(field, h5_path, pool_manifest, line_filters, encoder, to
 
     return lines, embs
 
-
+"""
 @torch.no_grad()
 def score_study(line_embs, videos, pool, device):
     line_embs = line_embs.to(device)
     videos_t = torch.from_numpy(videos).unsqueeze(0).to(device)
     video_mask = torch.ones(1, videos_t.shape[1], device=device)
     attended = pool(line_embs.unsqueeze(0), videos_t, video_mask)
-    logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
-    #logits = attended.squeeze(-1)
+    #logits = (line_embs.unsqueeze(0) * attended).sum(dim=-1)
+    logits = attended.squeeze(-1)
     return torch.sigmoid(logits).squeeze(0).cpu().numpy()
 
+"""
+@torch.no_grad()
+def score_study(line_embs, videos, pool, device, batch_size=256):
+    videos_t = torch.from_numpy(videos).unsqueeze(0).to(device)
+    video_mask = torch.ones(1, videos_t.shape[1], device=device)
+    all_scores = []
+    for i in range(0, len(line_embs), batch_size):
+        chunk = line_embs[i:i+batch_size].unsqueeze(0).to(device)
+        attended = pool(chunk, videos_t, video_mask)
+        logits = (chunk * attended).sum(dim=-1)
+        #logits = attended.squeeze(-1)
+        all_scores.append(torch.sigmoid(logits).squeeze(0).cpu())
+    return torch.cat(all_scores).numpy()
 def find_hotspots(scores, line_embs, threshold=0.3, knn=10):
     active = np.where(scores > threshold)[0]
     if len(active) == 0:
@@ -190,6 +219,7 @@ def main():
 
     encoder = LineEncoder().to(device)
     pool = CrossAttentionPool().to(device)
+    #pool = QuerySAPool().to(device)
     ckpt = torch.load(args.checkpoint, weights_only=True, map_location=device)
     encoder.load_state_dict(ckpt["encoder"])
     pool.load_state_dict(ckpt["attn_pool"])
@@ -241,6 +271,18 @@ def main():
             novel_embs[field] = torch.zeros(0, 1024)
             novel_to_idx[field] = {}
 
+    
+    # normalize line score distributions
+    train_ids_set = set(str(int(float(x))) for x in Path(args.pool_manifest).read_text().strip().splitlines())
+    train_ids_with_video = [s for s in train_ids_set if s in video_embs]
+
+    percentile_ref = {}
+    for field in args.fields:
+        print(f"  [{field}] Building percentile reference...", flush=True)
+        percentile_ref[field] = build_percentile_ref(
+            line_embs[field], video_embs, train_ids_with_video, pool, device
+        )
+    
     # Generate per-study, per-field
     print(f"\nGenerating heatmaps...", flush=True)
     results = []
@@ -255,6 +297,7 @@ def main():
 
         for field in args.fields:
             scores = score_study(line_embs[field], videos, pool, device)
+            scores = to_percentiles(scores, percentile_ref[field])
             hotspots = find_hotspots(scores, line_embs[field], args.threshold, knns[field])
 
             hotspot_data = []

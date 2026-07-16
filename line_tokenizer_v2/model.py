@@ -41,7 +41,7 @@ class QuerySAPool(nn.Module):
     def __init__(self, dim=1024, num_heads=16, n_layers=2):
         super().__init__()
         layer = nn.TransformerEncoderLayer(
-            d_model=dim, nhead=num_heads, dim_feedforward=1*dim,
+            d_model=dim, nhead=num_heads, dim_feedforward=2*dim,
             batch_first=True, norm_first=True,
         )
         self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
@@ -49,6 +49,8 @@ class QuerySAPool(nn.Module):
             nn.LayerNorm(dim),
             nn.Linear(dim, 1),
         )
+        #self.query = nn.Parameter(torch.zeros(1, 1, dim))
+
 
     def forward(self, lines, videos, video_mask):
         B, L, D = lines.shape
@@ -56,6 +58,7 @@ class QuerySAPool(nn.Module):
 
         # (B*L, 1+V, D)
         queries = lines.reshape(B * L, 1, D)
+        #queries = self.query.expand(B * L, 1, D)
         videos_exp = videos.unsqueeze(1).expand(B, L, V, D).reshape(B * L, V, D)
         seq = torch.cat([queries, videos_exp], dim=1)
 
@@ -64,6 +67,7 @@ class QuerySAPool(nn.Module):
         pad_mask = torch.cat([clip_mask.new_zeros(B * L, 1), 1 - clip_mask], dim=1).bool()
 
         out = self.encoder(seq, src_key_padding_mask=pad_mask)
+        #return out[:, 0].view(B, L, D)
         return self.head(out[:, 0]).view(B, L, 1)
 
 class CrossAttentionPool(nn.Module):

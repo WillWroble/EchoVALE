@@ -37,20 +37,21 @@ def load_videos_by_study(npz_path):
 
 
 FIELD_CONFIG = {
-    'study_findings': {'K': 2, 'M': 10},
-    'summary': {'K': 2, 'M': 10},
-    'history': {'K': 1, 'M': 5},
+    'study_findings': {'K': 2, 'M': 0},
+    'summary': {'K': 2, 'M': 0},
+    'history': {'K': 1, 'M': 0},
 }
 
 
 class SkipGramDataset(Dataset):
 
     def __init__(self, h5_dir, study_ids, videos_by_study, field='study_findings',
-                 subsample_t=1e-3, max_videos=128, line_filters=None):
+                 subsample_t=1e-3, max_videos=64, line_filters=None, clip_dropout=0.8):
         self.field = field
         self.K = FIELD_CONFIG[field]['K']
         self.M = FIELD_CONFIG[field]['M']
         self.max_videos = max_videos
+        self.clip_dropout = clip_dropout
 
         if line_filters:
             patterns = [re.compile(l.strip(), re.IGNORECASE) for l in open(line_filters)
@@ -124,11 +125,22 @@ class SkipGramDataset(Dataset):
         line_set = set(lines)
         videos = self.videos_by_study[sid]
 
+
+        
+        
+        # Bernouli Dropout
+        if self.clip_dropout > 0 and videos.shape[0] > 2:
+            keep = np.random.rand(videos.shape[0]) > self.clip_dropout
+            if keep.sum() < 2:
+                keep[:2] = True
+            videos = videos[keep]
+        
+        
         # Cap videos
         if videos.shape[0] > self.max_videos:
             sub = np.random.choice(videos.shape[0], self.max_videos, replace=False)
             videos = videos[sub]
-
+        
         
         # Positive selection with frequency downsampling
         
@@ -154,8 +166,12 @@ class SkipGramDataset(Dataset):
         masks = np.stack([self.token_masks[l] for l in all_lines])
         labels = [1.0] * self.K + [0.0] * self.M
         return ids, masks, videos, labels
-
-
+    def sample_negatives(self, M):
+        idx = np.random.choice(len(self.all_lines), M, replace=False, p=self.neg_probs)
+        lines = [self.all_lines[i] for i in idx]
+        ids = torch.stack([torch.from_numpy(self.token_ids[l]) for l in lines])
+        mask = torch.stack([torch.from_numpy(self.token_masks[l]) for l in lines])
+        return ids, mask
 def collate_fn(batch):
     """Pad videos to batch max. Returns flat lines + per-study video tensors."""
     max_vids = max(v.shape[0] for _, _, v, _ in batch)
