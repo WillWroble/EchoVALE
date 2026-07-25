@@ -29,6 +29,7 @@ import h5py
 import numpy as np
 import torch
 import torch.distributed as dist
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
@@ -87,8 +88,6 @@ def clip_collate(batch):
 
 def ensure_pretrain_csv(avi_manifest, study_manifest, output_csv):
     output_csv = Path(output_csv)
-    #if output_csv.exists():
-    #    return
     keep = set(Path(study_manifest).read_text().split())
     sid_to_int = {}
     lines = []
@@ -235,6 +234,23 @@ def load_frozen_encoder(checkpoint_path, model_name, device):
 
 
 # ---------------------------------------------------------------------------
+# Loss
+# ---------------------------------------------------------------------------
+
+def infonce_loss(logits, K):
+    """Multi-positive InfoNCE. logits: [B, K + N_neg], first K are positives.
+
+    -log( sum_pos softmax ) via logsumexp -- no underflow, no epsilon.
+    Once positives hold all the mass the gradient vanishes regardless of how
+    it is distributed among them, so specialization is not penalized.
+    """
+    logits = logits.float()
+    pos_lse = torch.logsumexp(logits[:, :K], dim=1)
+    all_lse = torch.logsumexp(logits, dim=1)
+    return -(pos_lse - all_lse).mean()
+
+
+# ---------------------------------------------------------------------------
 # LR schedule
 # ---------------------------------------------------------------------------
 
@@ -366,10 +382,24 @@ def main():
             print(f"loaded line encoder: {args.line_checkpoint}", flush=True)
 
     pooler = DDP(pooler, device_ids=[local_rank])
+
+    video_proj = nn.Sequential(
+        nn.LayerNorm(args.embed_dim),
+        nn.Linear(args.embed_dim, 4 * args.embed_dim),
+        nn.GELU(),
+        nn.Linear(4 * args.embed_dim, args.embed_dim),
+    ).to(device)
+    video_proj = DDP(video_proj, device_ids=[local_rank])
+
     line_encoder = DDP(line_encoder, device_ids=[local_rank], find_unused_parameters=True)
 
+    # CLIP-style learnable temperature, init 1/0.07
+    #logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device))
+    logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device), requires_grad=False)
+
     # ---- Optimizer -------------------------------------------------------
-    params = list(pooler.parameters()) + list(line_encoder.parameters())
+    params = (list(pooler.parameters()) + list(video_proj.parameters())
+              + list(line_encoder.parameters()) + [logit_scale])
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=args.weight_decay)
     total_steps = args.epochs * args.ipe
 
@@ -387,6 +417,9 @@ def main():
         ckpt = torch.load(args.resume, map_location="cpu", weights_only=False)
         pooler.module.load_state_dict(ckpt["pooler"])
         line_encoder.module.load_state_dict(ckpt["encoder"])
+        video_proj.module.load_state_dict(ckpt["v_proj"])
+        with torch.no_grad():
+            logit_scale.copy_(ckpt["logit_scale"].to(device))
         optimizer.load_state_dict(ckpt["optimizer"])
         start_epoch = ckpt["epoch"] + 1
         global_step = ckpt["step"]
@@ -402,6 +435,7 @@ def main():
         train_iter = iter(train_loader)
         pooler.train()
         line_encoder.train()
+        video_proj.train()
 
         epoch_loss, epoch_n = 0.0, 0
         t0 = time.time()
@@ -448,22 +482,23 @@ def main():
 
             # Forward — trainable
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                clip_embs = pooler(patches).squeeze(1)                  # [B, 1024]
+                clip_embs = video_proj(pooler(patches).squeeze(1))      # [B, 1024]
+                clip_embs = F.normalize(clip_embs.float(), dim=-1)
 
                 all_ids = torch.cat([pos_ids.view(-1, 128), neg_ids])
                 all_masks = torch.cat([pos_masks.view(-1, 128), neg_masks])
                 all_line_embs = line_encoder(all_ids, all_masks)        # [B*K + N_neg, 1024]
+                all_line_embs = F.normalize(all_line_embs.float(), dim=-1)
 
                 p_embs = all_line_embs[:B * args.K].view(B, args.K, -1)
                 n_embs = all_line_embs[B * args.K:]
 
-                pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1)  # [B, K]
-                neg_logits = clip_embs @ n_embs.T                       # [B, N_neg]
+                scale = logit_scale.exp().clamp(max=100.0)
+                pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1) * scale  # [B, K]
+                neg_logits = (clip_embs @ n_embs.T) * scale                     # [B, N_neg]
                 logits = torch.cat([pos_logits, neg_logits], dim=1)
 
-            labels = torch.cat([torch.ones(B, args.K, device=device),
-                                torch.zeros(B, args.N_neg, device=device)], dim=1)
-            loss = F.binary_cross_entropy_with_logits(logits.float(), labels)
+            loss = infonce_loss(logits, args.K)
 
             optimizer.zero_grad()
             loss.backward()
@@ -481,6 +516,7 @@ def main():
         # ---- Val ---------------------------------------------------------
         pooler.eval()
         line_encoder.eval()
+        video_proj.eval()
         val_loss_sum, val_n = 0.0, 0
         val_iter = iter(val_loader)
 
@@ -512,19 +548,20 @@ def main():
 
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     patches = encoder(clips)
-                    clip_embs = pooler(patches).squeeze(1)
+                    clip_embs = video_proj(pooler(patches).squeeze(1))
+                    clip_embs = F.normalize(clip_embs.float(), dim=-1)
                     all_ids = torch.cat([pos_ids.view(-1, 128), neg_ids])
                     all_masks = torch.cat([pos_masks.view(-1, 128), neg_masks])
                     all_line_embs = line_encoder(all_ids, all_masks)
+                    all_line_embs = F.normalize(all_line_embs.float(), dim=-1)
                     p_embs = all_line_embs[:B * args.K].view(B, args.K, -1)
                     n_embs = all_line_embs[B * args.K:]
-                    pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1)
-                    neg_logits = clip_embs @ n_embs.T
+                    scale = logit_scale.exp().clamp(max=100.0)
+                    pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1) * scale
+                    neg_logits = (clip_embs @ n_embs.T) * scale
                     logits = torch.cat([pos_logits, neg_logits], dim=1)
 
-                labels = torch.cat([torch.ones(B, args.K, device=device),
-                                    torch.zeros(B, args.N_neg, device=device)], dim=1)
-                val_loss = F.binary_cross_entropy_with_logits(logits.float(), labels)
+                val_loss = infonce_loss(logits, args.K)
                 val_loss_sum += val_loss.item() * B
                 val_n += B
 
@@ -535,15 +572,19 @@ def main():
         if is_main:
             row = dict(epoch=epoch, train_loss=round(train_loss, 6),
                        val_loss=round(val_loss, 6),
+                       temp=round(1.0 / logit_scale.exp().clamp(max=100.0).item(), 5),
                        lr=round(lr, 8), time=round(elapsed, 1))
             with open(log_path, "a") as f:
                 f.write(json.dumps(row) + "\n")
             print(f"epoch {epoch}  train={train_loss:.6f}  val={val_loss:.6f}  "
+                  f"temp={1.0 / logit_scale.exp().clamp(max=100.0).item():.4f}  "
                   f"lr={lr:.1e}  {elapsed:.0f}s", flush=True)
 
             ckpt = {
                 "pooler": pooler.module.state_dict(),
                 "encoder": line_encoder.module.state_dict(),
+                "v_proj": video_proj.module.state_dict(),
+                "logit_scale": logit_scale.detach().cpu(),
                 "optimizer": optimizer.state_dict(),
                 "epoch": epoch, "step": global_step,
                 "best_val": min(best_val, val_loss),

@@ -20,9 +20,9 @@ cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer_v2
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining/infonce_768_all.npz \
 #--video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_outside_fixed.npz \
 python -u eval_fyler.py \
-    --checkpoint results/v54/best.pt \
+    --checkpoint results/v57/best.pt \
     --fyler_lines /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_lines.csv \
     --fyler_labels /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/fyler_labels_v2.csv \
     --video_embeddings /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v2/embeddings/jepa_clips_4x1024_MIMIC_outside.npz \
     --manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/study_outside.txt \
-    --output_dir results/v54/eval_fyler_lines_v2_outside
+    --output_dir results/v57/eval_fyler_lines_v2_outside

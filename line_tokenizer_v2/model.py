@@ -38,7 +38,7 @@ class LineEncoder(nn.Module):
 class QuerySAPool(nn.Module):
     """Prepend query token to clips, run SA, classify query output."""
 
-    def __init__(self, dim=1024, num_heads=16, n_layers=2):
+    def __init__(self, dim=1024, num_heads=16, n_layers=4):
         super().__init__()
         layer = nn.TransformerEncoderLayer(
             d_model=dim, nhead=num_heads, dim_feedforward=2*dim,

@@ -23,7 +23,7 @@ def get_cosine_schedule(optimizer, warmup_steps, total_steps):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
-def run_step(encoder, attn_pool, batch, device, L, dataset=None, tau=1.5):
+def run_step(encoder, attn_pool, batch, device, L, dataset=None, tau=1.0):
     input_ids, attn_mask, videos, video_mask, labels = batch
     input_ids = input_ids.to(device)
     attn_mask = attn_mask.to(device)
@@ -36,12 +36,12 @@ def run_step(encoder, attn_pool, batch, device, L, dataset=None, tau=1.5):
     line_embs = line_embs.view(B, L, -1)
     
     if dataset is not None:
-        neg_ids, neg_mask = dataset.sample_negatives(32)
+        neg_ids, neg_mask = dataset.sample_negatives(16)
         neg_ids, neg_mask = neg_ids.to(device), neg_mask.to(device)
         neg_embs = encoder(neg_ids, neg_mask)
         neg_embs = neg_embs.unsqueeze(0).expand(B, -1, -1)
         line_embs = torch.cat([line_embs, neg_embs], dim=1)
-        neg_labels = torch.zeros(B, 32, device=device)
+        neg_labels = torch.zeros(B, 16, device=device)
         labels = labels.to(device).view(B, dataset.K)
         labels = torch.cat([labels, neg_labels], dim=1)
 
