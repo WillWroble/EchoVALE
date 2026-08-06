@@ -8,5 +8,5 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v3
 python -u merge_shards.py \
-    --shard_dir embeddings/clip_encoder_outside_shards \
-    --output embeddings/clip_encoder_4x1024_outside.npz
+    --shard_dir embeddings/clip_encoder_v3_best_shards \
+    --output embeddings/clip_encoder_v3_best_4x1024.npz

@@ -16,7 +16,7 @@ import torch
 from transformers import AutoTokenizer
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-from model_SA import LineEncoder, CrossAttentionPool#, QuerySAPool
+from model import LineEncoder, CrossAttentionPool, QuerySAPool
 
 CODE_RE = re.compile(r'\s*\[\d+\]\s*$')
 
@@ -93,8 +93,8 @@ def score_study(encoder, pool, line_embs, videos, device, batch_size=256):
             chunk = line_embs[i:i+batch_size].unsqueeze(0).to(device)
             vm = video_mask  # same for all chunks
             attended = pool(chunk, videos_t, vm)
-            logits = (chunk * attended).sum(dim=-1)
-            #logits = attended.squeeze(-1)
+            #logits = (chunk * attended).sum(dim=-1)
+            logits = attended.squeeze(-1)
             all_scores.append(torch.sigmoid(logits).squeeze(0).cpu())
     return torch.cat(all_scores).numpy()
 def main():
@@ -163,8 +163,8 @@ def main():
 
         # Load model
         encoder = LineEncoder().to(device)
-        pool = CrossAttentionPool().to(device)
-        #pool = QuerySAPool().to(device)
+        #pool = CrossAttentionPool().to(device)
+        pool = QuerySAPool().to(device)
         ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
         encoder.load_state_dict(ckpt["encoder"])
         pool.load_state_dict(ckpt["attn_pool"])

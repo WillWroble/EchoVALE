@@ -163,7 +163,7 @@ class LineBank:
                 lines = merge_soft_wraps(lines)
                 lines = [l.lstrip("\u2022 ").strip() for l in lines]
                 lines = [l for l in lines if keep(l)]
-                if len(lines) >= K:
+                if len(lines) >= 1:
                     self.study_lines[sid] = lines
 
         print(f"LineBank[{field}]: {len(self.study_lines):,} studies", flush=True)
@@ -190,6 +190,7 @@ class LineBank:
         self.token_ids = {l: enc["input_ids"][i] for i, l in enumerate(self.all_lines)}
         self.token_masks = {l: enc["attention_mask"][i] for i, l in enumerate(self.all_lines)}
 
+    """
     def sample_positives(self, sid):
         lines = self.study_lines.get(sid)
         if lines is None:
@@ -201,6 +202,23 @@ class LineBank:
         chosen = [kept[i] for i in sel]
         ids = np.stack([self.token_ids[l] for l in chosen])
         masks = np.stack([self.token_masks[l] for l in chosen])
+        return ids, masks
+    """
+    def sample_positives(self, sid):
+        lines = self.study_lines.get(sid)
+        if lines is None:
+            return None, None
+        kept = [l for l in lines if np.random.rand() < self.line_keep_prob.get(l, 1.0)]
+        if len(kept) < self.K:
+            kept = lines
+        n = min(len(kept), self.K)
+        sel = np.random.choice(len(kept), size=n, replace=False)
+        positives = [kept[i] for i in sel]
+        ids = np.zeros((self.K, 128), dtype=np.int64)
+        masks = np.zeros((self.K, 128), dtype=np.int64)
+        for i, l in enumerate(positives):
+            ids[i] = self.token_ids[l]
+            masks[i] = self.token_masks[l]
         return ids, masks
 
     def sample_negatives(self, N):
@@ -236,20 +254,27 @@ def load_frozen_encoder(checkpoint_path, model_name, device):
 # ---------------------------------------------------------------------------
 # Loss
 # ---------------------------------------------------------------------------
-
-def infonce_loss(logits, K):
-    """Multi-positive InfoNCE. logits: [B, K + N_neg], first K are positives.
+"""
+Multi-positive InfoNCE. logits: [B, K + N_neg], first K are positives.
 
     -log( sum_pos softmax ) via logsumexp -- no underflow, no epsilon.
     Once positives hold all the mass the gradient vanishes regardless of how
     it is distributed among them, so specialization is not penalized.
-    """
+"""    
+"""
+def infonce_loss(logits, K):
     logits = logits.float()
     pos_lse = torch.logsumexp(logits[:, :K], dim=1)
     all_lse = torch.logsumexp(logits, dim=1)
     return -(pos_lse - all_lse).mean()
 
-
+"""
+def infonce_loss(logits, K):
+    """L_out: mean of per-positive log-probs. Equalizes across positives."""
+    logits = logits.float()
+    all_lse = torch.logsumexp(logits, dim=1, keepdim=True)   # [B, 1]
+    per_pos = logits[:, :K] - all_lse                         # [B, K]
+    return -per_pos.mean()
 # ---------------------------------------------------------------------------
 # LR schedule
 # ---------------------------------------------------------------------------
@@ -394,8 +419,8 @@ def main():
     line_encoder = DDP(line_encoder, device_ids=[local_rank], find_unused_parameters=True)
 
     # CLIP-style learnable temperature, init 1/0.07
-    #logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device))
-    logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device), requires_grad=False)
+    logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device))
+    #logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device), requires_grad=False)
 
     # ---- Optimizer -------------------------------------------------------
     params = (list(pooler.parameters()) + list(video_proj.parameters())
@@ -466,9 +491,9 @@ def main():
             pos_ids = torch.from_numpy(np.stack(pos_ids)).to(device)    # [B, K, 128]
             pos_masks = torch.from_numpy(np.stack(pos_masks)).to(device)
 
-            neg_ids, neg_masks = line_bank.sample_negatives(args.N_neg)
-            neg_ids = torch.from_numpy(neg_ids).to(device)              # [N_neg, 128]
-            neg_masks = torch.from_numpy(neg_masks).to(device)
+            #neg_ids, neg_masks = line_bank.sample_negatives(args.N_neg)
+            #neg_ids = torch.from_numpy(neg_ids).to(device)              # [N_neg, 128]
+            #neg_masks = torch.from_numpy(neg_masks).to(device)
 
             # LR
             lr = cosine_lr(global_step, total_steps, args.lr, args.warmup_steps)
@@ -482,6 +507,7 @@ def main():
 
             # Forward — trainable
             with torch.autocast("cuda", dtype=torch.bfloat16):
+                """
                 clip_embs = video_proj(pooler(patches).squeeze(1))      # [B, 1024]
                 clip_embs = F.normalize(clip_embs.float(), dim=-1)
 
@@ -497,9 +523,21 @@ def main():
                 pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1) * scale  # [B, K]
                 neg_logits = (clip_embs @ n_embs.T) * scale                     # [B, N_neg]
                 logits = torch.cat([pos_logits, neg_logits], dim=1)
+                """
+                clip_embs = video_proj(pooler(patches).squeeze(1))
+                clip_embs = F.normalize(clip_embs.float(), dim=-1)
+                line_embs = line_encoder(pos_ids.view(-1, 128), pos_masks.view(-1, 128))
+                line_embs = line_embs.view(B, args.K, -1)
+                line_mask = (pos_masks.view(B, args.K, 128).sum(-1) > 0).float().to(device)
+                text_embs = (line_embs * line_mask.unsqueeze(-1)).sum(1) / line_mask.sum(1, keepdim=True)
+                text_embs = F.normalize(text_embs.float(), dim=-1)
+                scale = logit_scale.exp().clamp(max=100.0)
+                logits = (clip_embs @ text_embs.T) * scale
+                labels = torch.arange(B, device=device)
 
-            loss = infonce_loss(logits, args.K)
+            #loss = infonce_loss(logits, args.K)
 
+            loss = F.cross_entropy(logits, labels)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(params, 1.0)
@@ -542,12 +580,13 @@ def main():
                     pos_masks.append(masks)
                 pos_ids = torch.from_numpy(np.stack(pos_ids)).to(device)
                 pos_masks = torch.from_numpy(np.stack(pos_masks)).to(device)
-                neg_ids, neg_masks = line_bank.sample_negatives(args.N_neg)
-                neg_ids = torch.from_numpy(neg_ids).to(device)
-                neg_masks = torch.from_numpy(neg_masks).to(device)
+                #neg_ids, neg_masks = line_bank.sample_negatives(args.N_neg)
+                #neg_ids = torch.from_numpy(neg_ids).to(device)
+                #neg_masks = torch.from_numpy(neg_masks).to(device)
 
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     patches = encoder(clips)
+                    """
                     clip_embs = video_proj(pooler(patches).squeeze(1))
                     clip_embs = F.normalize(clip_embs.float(), dim=-1)
                     all_ids = torch.cat([pos_ids.view(-1, 128), neg_ids])
@@ -560,8 +599,20 @@ def main():
                     pos_logits = (clip_embs.unsqueeze(1) * p_embs).sum(-1) * scale
                     neg_logits = (clip_embs @ n_embs.T) * scale
                     logits = torch.cat([pos_logits, neg_logits], dim=1)
+                    """
+                    clip_embs = video_proj(pooler(patches).squeeze(1))
+                    clip_embs = F.normalize(clip_embs.float(), dim=-1)
+                    line_embs = line_encoder(pos_ids.view(-1, 128), pos_masks.view(-1, 128))
+                    line_embs = line_embs.view(B, args.K, -1)
+                    line_mask = (pos_masks.view(B, args.K, 128).sum(-1) > 0).float().to(device)
+                    text_embs = (line_embs * line_mask.unsqueeze(-1)).sum(1) / line_mask.sum(1, keepdim=True)
+                    text_embs = F.normalize(text_embs.float(), dim=-1)
+                    scale = logit_scale.exp().clamp(max=100.0)
+                    logits = (clip_embs @ text_embs.T) * scale
+                    labels = torch.arange(B, device=device)
 
-                val_loss = infonce_loss(logits, args.K)
+                #val_loss = infonce_loss(logits, args.K)
+                val_loss = F.cross_entropy(logits, labels)
                 val_loss_sum += val_loss.item() * B
                 val_n += B
 

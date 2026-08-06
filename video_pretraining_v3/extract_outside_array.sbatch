@@ -7,8 +7,9 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=60G
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-7
-#SBATCH --exclude=gpu-10-3,gpu-20-1
+#SBATCH --array=2
+##SBATCH --exclude=gpu-10-3,gpu-20-1
+#SBATCH --exclude=gpu-b07-0,gpu-b07-1,gpu-b07-2,gpu-b07-3,gpu-b08-0,gpu-b09-0,gpu-b11-0,gpu-b11-1,gpu-b11-2,gpu-b11-3
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v3
@@ -19,8 +20,8 @@ python -u extract_clip_encoder.py \
     --avi_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/avi_manifest_outside.csv \
     --study_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/study_outside.txt \
     --encoder_checkpoint /lab-share/Cardio-Mayourian-e2/Public/Echo_JEPA/checkpoints/echojepa_vitl_mimic_bch_cooldown/latest.pt \
-    --v3_checkpoint results/v3/day2.pt \
-    --output_dir embeddings/clip_encoder_outside_shards \
+    --v3_checkpoint results/v3/best.pt \
+    --output_dir embeddings/clip_encoder_v3_best_outside_shards \
     --num_clips 4 \
     --batch_size 8 \
     --n_tasks 8

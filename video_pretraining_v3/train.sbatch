@@ -4,12 +4,12 @@
 #SBATCH --error=/lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v3/logs/train_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:xlarge:4
+#SBATCH --gres=gpu:large:4
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=500G
 #SBATCH --time=7-00:00:00
 #SBATCH --exclude=gpu-10-3,gpu-20-1
-
+#SBATCH --partition=bch-gpu
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/video_pretraining_v3
@@ -24,9 +24,9 @@ torchrun --standalone --nproc_per_node=4 train.py \
     --train_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/platon_train.txt \
     --val_manifest /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/manifests/platon_val.txt \
     --h5_dir /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/line_tokenizer/data \
-    --output_dir results/v3 \
-    --batch_size 128 \
-    --K 4 \
+    --output_dir results/v5 \
+    --batch_size 32 \
+    --K 32 \
     --N_neg 128 \
     --epochs 300 \
     --ipe 300 \

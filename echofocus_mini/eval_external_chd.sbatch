@@ -11,7 +11,7 @@ conda activate /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/env
 cd /lab-share/Cardio-Mayourian-e2/Public/Echo_Clip/echofocus_mini
 
 python -u eval_external_chd.py \
-    --checkpoint results/768_jepa_chd_platon/best.pt \
-    --embeddings ../video_pretraining_v2/embeddings/fl/mode3/internal/round_240_outside.npz \
+    --checkpoint results/ce/v3_best/best.pt \
+    --embeddings ../video_pretraining_v3/embeddings/clip_encoder_v3_best_4x1024_outside.npz \
     --train_manifest ../manifests/platon_train.txt \
-    --output_dir results/768_jepa_chd_platon/external
+    --output_dir results/ce/v3_best/external
